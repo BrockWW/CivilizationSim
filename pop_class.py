@@ -44,7 +44,7 @@ class Person:
             # randomly choosing point if equidistant from multiple points
             choice_index = np.random.choice(min_index)
 
-            # finding distance to nearest city center
+            # finding distance to nearest city
             x_diff = self.city_coords[choice_index][1] - self.loc[1]
             y_diff = self.city_coords[choice_index][0] - self.loc[0]
 
@@ -185,6 +185,13 @@ class Person:
         for pos in neighboring_positions:
             # only update like array if a neighbor is located in adjacent position, neighboring position is not current position, and last move was not stand still
             # the not standing still condition will cut down on explosive growth when pops get trapped by other pops
+            #print(self.CivClass.pop_locs)
+            #print(pos)
+            #print(self.loc)
+            #print(self.last_move)
+            #print(any(np.equal(self.CivClass.pop_locs,pos).all(1)))
+            #print((self.loc == pos).all())
+            #print((self.last_move == np.array([0,0])).all())
             if any(np.equal(self.CivClass.pop_locs,pos).all(1)) and not (self.loc == pos).all() and not (self.last_move == np.array([0,0])).all():
                 # determine id of neighbor
                 neighbor_id = np.where((self.CivClass.pop_locs == pos).all(1))[0][0]
@@ -251,7 +258,6 @@ class Person:
                     self.CivClass.births += 1
                     self.CivClass.pop += 1
                     self.CivClass.add_person(start_loc)
-                    self.CivClass.pop_locs = np.vstack((self.CivClass.pop_locs,start_loc))
 
                     # adding to pop if child spawns in city
                     for city in self.CivClass.cities:
@@ -351,15 +357,23 @@ class King(Person):
         row_h = 1
         col_l = -1
         col_h = 1
-        # check row boundary
+        # check row boundary for capital center and world border
         if self.loc[0] == np.max(self.capital_center[0]):
             row_h = 0
         elif self.loc[0] == np.min(self.capital_center[0]):
             row_l = 0
-        # check column boundary
+        elif self.loc[0] == self.CivClass.grid_size[0]-1:
+            row_h = 0
+        elif self.loc[0] == 0:
+            row_l = 0
+        # check column boundary for capital center and world border
         if self.loc[1] == np.max(self.capital_center[1]):
             col_h = 0
         elif self.loc[1] == np.min(self.capital_center[1]):
+            col_l = 0
+        elif self.loc[1] == self.CivClass.grid_size[1]-1:
+            col_h = 0
+        elif self.loc[1] == 0:
             col_l = 0
 
         # creating list of possible moves
@@ -383,9 +397,9 @@ class King(Person):
             # initializing possible moves allowed for when king is outside of city, will update based on directional weights
             possible_moves = np.empty((0,2))
 
-            # finding distance to nearest city center
-            x_diff = self.city_coords[choice_index][1] - self.loc[1]
-            y_diff = self.city_coords[choice_index][0] - self.loc[0]
+            # finding distance to capital center
+            x_diff = self.capital_center[choice_index][1] - self.loc[1]
+            y_diff = self.capital_center[choice_index][0] - self.loc[0]
 
             # weigthing movements based on direction of capital center
             if x_diff >= 0 and y_diff >= 0:
@@ -469,3 +483,53 @@ class King(Person):
                     weight_arr = np.delete(weight_arr, index)
                     # fix unbalanced weight list
                     weight_arr += weight/len(weight_arr)
+
+
+#################################################
+# Peasant Class
+#################################################
+class Peasant(Person):
+    def __init__(self, location, id, class_stats, CivClass):
+        # call Person __init__ function
+        super().__init__(location, id, class_stats, CivClass)
+        # add additional attributes below
+
+        # defining capital center array
+        capital = [city for city in self.CivClass.cities if city.name == "capital"][0]
+        self.capital_center = capital.center_arr
+
+    # overwrite Person check_surroundings to stay out of capital center
+    def check_surroundings(self):
+        # setting movement constraints
+        # peasant will not move inside of capital center
+        row_l = -1
+        row_h = 1
+        col_l = -1
+        col_h = 1
+        # check row boundary for capital center and world border
+        if self.loc[0] == np.min(self.capital_center[0]):
+            row_h = 0
+        elif self.loc[0] == np.max(self.capital_center[0]):
+            row_l = 0
+        elif self.loc[0] == self.CivClass.grid_size[0]-1:
+            row_h = 0
+        elif self.loc[0] == 0:
+            row_l = 0
+        # check column boundary for capital center and world border
+        if self.loc[1] == np.min(self.capital_center[1]):
+            col_h = 0
+        elif self.loc[1] == np.max(self.capital_center[1]):
+            col_l = 0
+        elif self.loc[1] == self.CivClass.grid_size[1]-1:
+            col_h = 0
+        elif self.loc[1] == 0:
+            col_l = 0
+        
+        # creating list of possible moves
+        row_moves = np.arange(row_l,row_h+1)
+        col_moves = np.arange(col_l,col_h+1)
+
+        ROW_MOVES, COL_MOVES = np.meshgrid(row_moves, col_moves)
+        possible_moves = np.vstack((ROW_MOVES.ravel(),COL_MOVES.ravel())).T
+
+        return possible_moves

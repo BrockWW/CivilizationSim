@@ -52,15 +52,17 @@ class Civilization:
         self.pop_dist_dict = dict(zip(pop_class, pop_probs))
         self.pop_color_dict = dict(zip(pop_class, pop_colors))
 
+        self.world_city_coords = np.empty((0,2))
         # creating initial population
         for city in self.cities:
             # setting pop starting locations
-            city_locs = self.world_grid_pops(city)
-            for i in range(len(city_locs)):
-                self.add_person(city_locs[i])
-                self.pop_locs.append(city_locs[i])
+            self.world_city_coords = np.vstack((self.world_city_coords, city.coord_arr))
+            if city.name == "capital":
+                self.capital_center = city.center_arr
+        for i in range(self.pop):
+            self.add_person(self.world_city_coords)
     
-    def add_person(self, location):
+    def add_person(self, open_locations):
         id = len(self.citizens)
         # setting up probabilities and classes based on maximum class constraints
         reg_classes_prob = []
@@ -87,13 +89,56 @@ class Civilization:
             print("\rSTARBURST STREAM!!!\n")
         # creating new citizen
         if world_class == "king":
+            if len(open_locations.shape) == 2 and open_locations.shape[0] > 1:
+                index = np.random.choice(np.arange(open_locations.shape[0]), 1)
+                location = open_locations[index].flatten()
+            else:
+                location = open_locations.flatten()
             new_citizen = King(location, id, self.classes[world_class], self)
             self.citizens.append(new_citizen)
             self.citizens_relation.append(new_citizen.like_arr)
+        elif world_class == "peasant":
+            # checking if open location array is 2d or not
+            if len(open_locations.shape) == 2 and open_locations.shape[0] > 1:
+                rem_mask = np.all(~np.isin(open_locations, self.capital_center), axis=1)
+                peasant_open_locs = open_locations[rem_mask]
+                if len(peasant_open_locs.shape) == 2 and peasant_open_locs.shape[0] > 1:
+                    index = np.random.choice(np.arange(peasant_open_locs.shape[0]), 1)
+                    location = peasant_open_locs[index].flatten()
+                elif len(open_locations.shape) == 2 and len(peasant_open_locs) == 2:
+                    location = peasant_open_locs.flatten()
+            else:
+                rem_mask = np.all(~np.equal(open_locations, self.capital_center))
+                peasant_open_locs = open_locations[rem_mask]
+                if len(peasant_open_locs) == 0:
+                    # no valid space to spawn pop
+                    return
+                else:
+                    location = peasant_open_locs.flatten()
+            new_citizen = Peasant(location, id, self.classes[world_class], self)
+            self.citizens.append(new_citizen)
+            self.citizens_relation.append(new_citizen.like_arr)
         else:
+            if len(open_locations.shape) == 2 and open_locations.shape[0] > 1:
+                index = np.random.choice(np.arange(open_locations.shape[0]), 1)
+                location = open_locations[index].flatten()
+            else:
+                location = open_locations.flatten()
             new_citizen = Person(location, id, self.classes[world_class], self)
             self.citizens.append(new_citizen)
             self.citizens_relation.append(new_citizen.like_arr)
+
+        # append new pop location
+        self.pop_locs.append(location)
+
+        # removing occupied location from consideration
+        if len(open_locations.shape) == 2:
+            rem_mask = np.all(~np.isin(open_locations, location), axis=1)
+            open_locations = open_locations[rem_mask]
+        # if current element is last element do not create new pop as viable location not available
+        # will happen for a peasant trying to be born in capital center
+        else:
+            return
 
     def create_cities(self, cities_dict):
         for key in cities_dict.keys():
@@ -103,12 +148,6 @@ class Civilization:
             else:
                 self.cities.append(City(self.cities_max_pop, cities_dict[key], self))
                 self.pop += cities_dict[key]["pop"]
-
-    def world_grid_pops(self, city):
-        start_index = np.random.randint(0, len(city.coord_arr), city.pop)
-        pop_locs = city.coord_arr[start_index]
-
-        return pop_locs
     
     def draw_grid(self, pop_locations):
         # initialize current step city
